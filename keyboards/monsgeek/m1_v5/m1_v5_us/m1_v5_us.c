@@ -304,7 +304,6 @@ void housekeeping_task_kb(void) { // loop
 #endif
 
     static uint32_t hs_current_time;
-    static bool     val_value = false;
 
     charging_state    = readPin(HS_BAT_CABLE_PIN);
     battery_full_flag = readPin(BAT_FULL_PIN);
@@ -326,17 +325,9 @@ void housekeeping_task_kb(void) { // loop
 
     if (charging_state) {
         writePin(HS_LED_BOOSTING_PIN, 0);
-        if (!val_value) {
-            rgb_matrix_sethsv_noeeprom(start_hsv.h, start_hsv.s, 150);
-        }
-        val_value = true;
 
     } else {
         writePin(HS_LED_BOOSTING_PIN, 1);
-        if (val_value) {
-            rgb_matrix_sethsv(start_hsv.h, start_hsv.s, start_hsv.v);
-        }
-        val_value = false;
     }
 
     if ((readPin(SYSTEM_WIN_PIN) != 0) && (readPin(SYSTEM_MAC_PIN) == 0)) { // mac system
