@@ -64,7 +64,7 @@ void keyboard_post_init_kb(void) {
 
 #ifdef LED_POWER_EN_PIN
     gpio_set_pin_output(LED_POWER_EN_PIN);
-    if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_PIN);
+    gpio_write_pin_high(LED_POWER_EN_PIN);
 
     gpio_set_pin_output(HS_LED_BOOSTING_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
@@ -131,7 +131,7 @@ void suspend_power_down_kb(void) {
 
 void suspend_wakeup_init_kb(void) {
 #    ifdef LED_POWER_EN_PIN
-    if (rgb_matrix_get_val() != 0) gpio_write_pin_high(LED_POWER_EN_PIN);
+    gpio_write_pin_high(LED_POWER_EN_PIN);
 #    endif
 
     wireless_devs_change(wireless_get_current_devs(), wireless_get_current_devs(), false);
@@ -494,10 +494,6 @@ bool rgb_matrix_indicators_kb() {
 void lpwr_wakeup_hook(void) {
     hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
 
-    if (rgb_matrix_get_val() != 0)
-        gpio_write_pin_high(LED_POWER_EN_PIN);
-    else
-        gpio_write_pin_low(LED_POWER_EN_PIN);
-
+    gpio_write_pin_high(LED_POWER_EN_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
 }
