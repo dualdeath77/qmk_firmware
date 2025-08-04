@@ -85,21 +85,17 @@ void wireless_send_nkro(report_nkro_t *report) {
         }
 
         // find key up and del it.
-        uint8_t nkro_keys = key_count;
-        for (uint8_t i = 0; i < WLS_KEYBOARD_REPORT_KEYS && temp_report_keyboard.keys[i]; i++) {
-            report_nkro_t found_report_nkro;
+        /* ! CUSTOM PATCH BEGIN ! */
+        /* ! Section rolled back to previous firmware ! */
+        /* ! This causes sticky keys in wireless mode ! */
+        for (uint8_t i = 0; i < KEYBOARD_REPORT_KEYS && temp_report_keyboard.keys[i]; i++) {
             uint8_t usageid = 0x00;
             uint8_t n;
-
-            found_report_nkro = temp_report_nkro;
-
-            for (uint8_t c = 0; c < nkro_keys; c++) {
-                for (n = 0; n < NKRO_REPORT_BITS && !found_report_nkro.bits[n]; n++) {}
-                usageid = (n << 3) | biton(found_report_nkro.bits[n]);
-                del_key_bit(&found_report_nkro, usageid);
+            for (uint8_t c = 0; c < key_count; c++) {
+                for (n = 0; n < NKRO_REPORT_BITS && !temp_report_nkro.bits[n]; n++) {}
+                usageid = (n << 3) | biton(temp_report_nkro.bits[n]);
+                del_key_bit(&temp_report_nkro, usageid);
                 if (usageid == temp_report_keyboard.keys[i]) {
-                    del_key_bit(&temp_report_nkro, usageid);
-                    nkro_keys--;
                     break;
                 }
             }
@@ -108,6 +104,7 @@ void wireless_send_nkro(report_nkro_t *report) {
                 temp_report_keyboard.keys[i] = 0x00;
             }
         }
+        /* ! CUSTOM PATCH END ! */
 
         /*
          * Use NKRO for sending when more than 6 keys are pressed
