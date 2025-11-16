@@ -6,7 +6,7 @@
     "bootmagic": {
         "matrix": [0, 0]
     },
-    "debounce": 1,
+    "debounce": 5,
     "diode_direction": "ROW2COL",
     "eeprom": {
         "driver": "wear_leveling",
@@ -19,6 +19,10 @@
         "rotary": [
             {"pin_a": "B7", "pin_b": "B6"}
         ]
+    },
+    "build": {
+        "debounce_type": "asym_eager_defer_pk",
+        "lto": true
     },
     "features": {
         "bootmagic": true,

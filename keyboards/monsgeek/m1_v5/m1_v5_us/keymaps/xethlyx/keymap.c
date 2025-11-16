@@ -1,6 +1,7 @@
 // Copyright 2024 yangzheng20003 (@yangzheng20003)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "lowpower.h"
 #include "module.h"
 #include "wls/wls.h"
 #include QMK_KEYBOARD_H
@@ -33,8 +34,8 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,  KC_LCMD,  KC_LALT,                      KC_SPC,                                 KC_RALT,  MO(_FL),  KC_RCTL,  KC_LEFT,  KC_DOWN,  KC_RGHT),
 
     [_FL] = LAYOUT( /* Function Layer */
-        QK_BOOT,  KC_MYCM,  KC_MAIL,  KC_WSCH,  KC_WHOM,  KC_MSEL,  KC_MPLY,  KC_MPRV,  KC_MNXT,  _______,  _______,  _______,  _______,  RGB_MOD,  _______,
-        EE_CLR,   _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  RGB_SPD,  RGB_SPI,  _______,  _______,
+        _______,  KC_MYCM,  KC_MAIL,  KC_WSCH,  KC_WHOM,  KC_MSEL,  KC_MPLY,  KC_MPRV,  KC_MNXT,  _______,  _______,  _______,  _______,  RGB_MOD,  _______,
+        _______,   _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  RGB_SPD,  RGB_SPI,  _______,  _______,
         QK_RBT,  _______,  _______,   KC_BT1,   KC_BT2,   KC_BT3,   KC_2G4,   KC_USB,   KC_INS,   _______,  KC_PSCR,  _______,  _______,  _______,  _______,
         KC_CAPS,  _______, _______,  _______,  _______,   _______,  _______,  KEEP_AWAKE,  _______,  RGB_TOG,  _______,  _______,            _______,  _______,
         _______,            _______,  _______,  KC_CALC,  _______,  _______,  _______,  KC_MUTE,  KC_VOLD,  KC_VOLU,  _______,  MO(_FBL), RGB_VAI,  _______,
@@ -55,9 +56,9 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_CAPS,  _______,  _______,  _______,  _______,  _______,  _______,  KEEP_AWAKE,  _______,  RGB_TOG,  _______,  _______,            _______,  _______,
         _______,            _______,  _______,  KC_CALC,  _______,  _______,  _______,  KC_MUTE,  KC_VOLD,  KC_VOLU,  _______,  MO(_FBL), RGB_VAI,  _______,
         _______,  _______,  _______,                      HS_BATQ,                                _______,  _______,  _______,  RGB_SAI,  RGB_VAD,  RGB_SAD),
-    [_FBL] = LAYOUT( /* ? */
+    [_FBL] = LAYOUT( /* Function + Right Shift */
         QK_BOOT,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,
-        _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,
+        EE_CLR,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,
         _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,
         _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,            _______,  _______,
         _______,            _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,
@@ -79,24 +80,26 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 bool rk_bat_req_flag;
 
-#define KEEP_AWAKE_KEY KC_LSFT
 #define KEEP_AWAKE_INTERVAL 5000
 uint32_t keep_awake_timer;
-bool     keep_awake_pressed = false;
 
 uint32_t keep_awake_callback(uint32_t trigger_time, void *cb_arg) {
-    if (keep_awake_pressed) {
-        unregister_code(KEEP_AWAKE_KEY);
+    static bool status = false;
+    report_mouse_t current_report = {};
+    if (status) {
+        current_report.y = 1;
     } else {
-        register_code(KEEP_AWAKE_KEY);
+        current_report.y = -1;
     }
+    host_mouse_send(&current_report);
+    lpwr_update_timestamp();
 
     // prevent timeout
     if (*md_getp_state() == MD_STATE_CONNECTED) {
         hs_rgb_blink_set_timer(timer_read32());
     }
 
-    keep_awake_pressed = !keep_awake_pressed;
+    status = !status;
     return 5000;
 }
 
@@ -120,15 +123,15 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (record->event.pressed) {
                 if (keep_awake_timer) {
                     cancel_deferred_exec(delayed_exec);
-                    if (keep_awake_pressed) {
-                        unregister_code(KEEP_AWAKE_KEY);
-                        keep_awake_pressed = false;
-                    }
                     keep_awake_timer = 0;
                     delayed_exec     = INVALID_DEFERRED_TOKEN;
+                    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_BT_EN);
+                    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_2G4_EN);
                 } else {
                     delayed_exec     = defer_exec(KEEP_AWAKE_INTERVAL, keep_awake_callback, NULL);
                     if (delayed_exec != INVALID_DEFERRED_TOKEN) keep_awake_timer = timer_read();
+                    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_BT_DIS);
+                    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_2G4_DIS);
                 }
                 return false;
             }
