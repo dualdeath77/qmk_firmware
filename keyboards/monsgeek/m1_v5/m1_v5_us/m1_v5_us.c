@@ -367,16 +367,16 @@ void housekeeping_task_kb(void) { // loop
 bool     wls_rgb_indicator_reset    = false;
 uint32_t wls_rgb_indicator_timer    = 0x00;
 uint32_t wls_rgb_indicator_interval = 0;
-uint32_t wls_rgb_indicator_times    = 0;
+// amount of times to repeat blinking before hiding indicator
+uint32_t wls_rgb_indicator_times    = 2;
 uint32_t wls_rgb_indicator_index    = 0;
 RGB      wls_rgb_indicator_rgb      = {0};
 
-static void rgb_matrix_wls_indicator_set(uint8_t index, RGB rgb, uint32_t interval, uint8_t times) {
+static void rgb_matrix_wls_indicator_set(uint8_t index, RGB rgb, uint32_t interval) {
     wls_rgb_indicator_timer = timer_read32();
 
     wls_rgb_indicator_index    = index;
     wls_rgb_indicator_interval = interval;
-    wls_rgb_indicator_times    = times * 2;
     wls_rgb_indicator_rgb      = rgb;
 }
 
@@ -385,19 +385,19 @@ static void rgb_matrix_wls_indicator_wls(uint8_t devs) {
 
     switch (devs) {
         case DEVS_USB: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_USB, (RGB){HS_LBACK_COLOR_USB}, interval, 1);
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_USB, (RGB){HS_LBACK_COLOR_USB}, interval);
         } break;
         case DEVS_BT1: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT1, (RGB){HS_LBACK_COLOR_BT1}, interval, 1);
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT1, (RGB){HS_LBACK_COLOR_BT1}, interval);
         } break;
         case DEVS_BT2: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT2, (RGB){HS_LBACK_COLOR_BT2}, interval, 1);
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT2, (RGB){HS_LBACK_COLOR_BT2}, interval);
         } break;
         case DEVS_BT3: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT3, (RGB){HS_LBACK_COLOR_BT3}, interval, 1);
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT3, (RGB){HS_LBACK_COLOR_BT3}, interval);
         } break;
         case DEVS_2G4: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_2G4, (RGB){HS_LBACK_COLOR_2G4}, interval, 1);
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_2G4, (RGB){HS_LBACK_COLOR_2G4}, interval);
         } break;
     }
 }
@@ -416,30 +416,22 @@ void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset) {
 
 static void rgb_matrix_wls_indicator(void) {
     if (wls_rgb_indicator_timer) {
-        if (timer_elapsed32(wls_rgb_indicator_timer) >= wls_rgb_indicator_interval) {
-            wls_rgb_indicator_timer = timer_read32();
+        if (timer_elapsed32(wls_rgb_indicator_timer) >= wls_rgb_indicator_interval * wls_rgb_indicator_times) {
+            wls_rgb_indicator_timer = 0x00;
 
-            if (wls_rgb_indicator_times) {
-                wls_rgb_indicator_times--;
-            }
-
-            if (wls_rgb_indicator_times <= 0) {
-                wls_rgb_indicator_timer = 0x00;
-
-                if (*md_getp_state() != MD_STATE_CONNECTED) {
-                    if (!(wireless_get_current_devs() == DEVS_USB && USB_DRIVER.state == USB_ACTIVE)) {
-                        rgb_matrix_wls_indicator_wls(wireless_get_current_devs());
-                    }
-                } else {
-                    // refresh led
-                    led_wakeup();
-
-                    return;
+            if (*md_getp_state() != MD_STATE_CONNECTED) {
+                if (!(wireless_get_current_devs() == DEVS_USB && USB_DRIVER.state == USB_ACTIVE)) {
+                    rgb_matrix_wls_indicator_wls(wireless_get_current_devs());
                 }
+            } else {
+                // refresh led
+                led_wakeup();
+
+                return;
             }
         }
 
-        if (wls_rgb_indicator_times % 2) {
+        if ((timer_elapsed32(wls_rgb_indicator_timer) / wls_rgb_indicator_interval) % 2 == 0) {
             rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.b);
         } else {
             rgb_matrix_set_color(wls_rgb_indicator_index, 0x00, 0x00, 0x00);
