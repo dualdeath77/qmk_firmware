@@ -1,8 +1,9 @@
 // Copyright 2024 yangzheng20003 (@yangzheng20003)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "m1_v5_us.h"
+
 #include "module.h"
-#include QMK_KEYBOARD_H
 #include "wls/wls.h"
 
 #ifdef WIRELESS_ENABLE
@@ -288,9 +289,104 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+
+#ifdef RGB_MATRIX_ENABLE
+
+#    ifdef WIRELESS_ENABLE
+bool     wls_rgb_indicator_reset    = false;
+uint32_t wls_rgb_indicator_timer    = 0x00;
+uint32_t wls_rgb_indicator_interval = 0;
+// hide connecting after this amount of time
+// the keyboard does this by default, i guess to save battery?
+uint32_t wls_rgb_indicator_timeout  = 5000;
+uint32_t wls_rgb_indicator_index    = 0;
+RGB      wls_rgb_indicator_rgb      = {0};
+
+static void rgb_matrix_wls_indicator_set(uint8_t index, RGB rgb, uint32_t interval) {
+    wls_rgb_indicator_timer = timer_read32();
+
+    wls_rgb_indicator_index    = index;
+    wls_rgb_indicator_interval = interval;
+    wls_rgb_indicator_rgb      = rgb;
+}
+
+static void rgb_matrix_wls_indicator_wls(uint8_t devs) {
+    uint32_t interval = wls_rgb_indicator_reset ? 200 : 500;
+
+    switch (devs) {
+        case DEVS_USB: {
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_USB, (RGB){HS_LBACK_COLOR_USB}, interval);
+        } break;
+        case DEVS_BT1: {
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT1, (RGB){HS_LBACK_COLOR_BT1}, interval);
+        } break;
+        case DEVS_BT2: {
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT2, (RGB){HS_LBACK_COLOR_BT2}, interval);
+        } break;
+        case DEVS_BT3: {
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT3, (RGB){HS_LBACK_COLOR_BT3}, interval);
+        } break;
+        case DEVS_2G4: {
+            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_2G4, (RGB){HS_LBACK_COLOR_2G4}, interval);
+        } break;
+    }
+}
+
+void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset) {
+    wls_rgb_indicator_reset = reset;
+
+    if (confinfo.current_dev != wireless_get_current_devs()) {
+        confinfo.current_dev = wireless_get_current_devs();
+        if (confinfo.current_dev > 0 && confinfo.current_dev < 4) confinfo.last_bt_dev = confinfo.current_dev;
+        eeconfig_update_kb(confinfo.raw);
+    }
+
+    rgb_matrix_wls_indicator_wls(new_devs);
+}
+
+void notify_usb_device_state_change_kb(struct usb_device_state usb_device_state) {
+    if (usb_device_state.configure_state == USB_DEVICE_STATE_CONFIGURED) {
+        wls_rgb_indicator_timer = 0x00;
+    }
+    notify_usb_device_state_change_user(usb_device_state);
+}
+
+bool md_receive_process_kb(uint8_t *pdata, uint8_t len) {
+    switch (pdata[0]) {
+        case MD_REV_CMD_DEVCTRL: {
+            switch (pdata[1]) {
+                case MD_REV_CMD_DEVCTRL_CONNECTED: {
+                    wls_rgb_indicator_timer = 0x00;
+                } break;
+            }
+        }
+    }
+    md_receive_process_user(pdata, len);
+    return true;
+}
+
+static void rgb_matrix_wls_indicator(void) {
+    if (wls_rgb_indicator_timer) {
+        if ((timer_elapsed32(wls_rgb_indicator_timer) / wls_rgb_indicator_interval) % 2 == 0) {
+            rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.b);
+        } else {
+            rgb_matrix_set_color(wls_rgb_indicator_index, 0x00, 0x00, 0x00);
+        }
+    }
+}
+
+#    endif
+
+#endif
+
 void housekeeping_task_kb(void) { // loop
 #ifdef WIRELESS_ENABLE
     wireless_housekeeping_task();
+#ifdef RGB_MATRIX_ENABLE
+    if (wls_rgb_indicator_timer && timer_elapsed32(wls_rgb_indicator_timer) > wls_rgb_indicator_timeout) {
+        wls_rgb_indicator_timer = 0x00;
+    }
+#endif
 #endif
 
     static uint32_t hs_current_time;
@@ -350,88 +446,6 @@ void housekeeping_task_kb(void) { // loop
 
     housekeeping_task_user();
 }
-
-#ifdef RGB_MATRIX_ENABLE
-
-#    ifdef WIRELESS_ENABLE
-bool     wls_rgb_indicator_reset    = false;
-uint32_t wls_rgb_indicator_timer    = 0x00;
-uint32_t wls_rgb_indicator_interval = 0;
-// amount of times to repeat blinking before hiding indicator
-uint32_t wls_rgb_indicator_times    = 2;
-uint32_t wls_rgb_indicator_index    = 0;
-RGB      wls_rgb_indicator_rgb      = {0};
-
-static void rgb_matrix_wls_indicator_set(uint8_t index, RGB rgb, uint32_t interval) {
-    wls_rgb_indicator_timer = timer_read32();
-
-    wls_rgb_indicator_index    = index;
-    wls_rgb_indicator_interval = interval;
-    wls_rgb_indicator_rgb      = rgb;
-}
-
-static void rgb_matrix_wls_indicator_wls(uint8_t devs) {
-    uint32_t interval = wls_rgb_indicator_reset ? 200 : 500;
-
-    switch (devs) {
-        case DEVS_USB: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_USB, (RGB){HS_LBACK_COLOR_USB}, interval);
-        } break;
-        case DEVS_BT1: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT1, (RGB){HS_LBACK_COLOR_BT1}, interval);
-        } break;
-        case DEVS_BT2: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT2, (RGB){HS_LBACK_COLOR_BT2}, interval);
-        } break;
-        case DEVS_BT3: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT3, (RGB){HS_LBACK_COLOR_BT3}, interval);
-        } break;
-        case DEVS_2G4: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_2G4, (RGB){HS_LBACK_COLOR_2G4}, interval);
-        } break;
-    }
-}
-
-void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset) {
-    wls_rgb_indicator_reset = reset;
-
-    if (confinfo.current_dev != wireless_get_current_devs()) {
-        confinfo.current_dev = wireless_get_current_devs();
-        if (confinfo.current_dev > 0 && confinfo.current_dev < 4) confinfo.last_bt_dev = confinfo.current_dev;
-        eeconfig_update_kb(confinfo.raw);
-    }
-
-    rgb_matrix_wls_indicator_wls(new_devs);
-}
-
-static void rgb_matrix_wls_indicator(void) {
-    if (wls_rgb_indicator_timer) {
-        if (timer_elapsed32(wls_rgb_indicator_timer) >= wls_rgb_indicator_interval * wls_rgb_indicator_times) {
-            wls_rgb_indicator_timer = 0x00;
-
-            if (*md_getp_state() != MD_STATE_CONNECTED) {
-                if (!(wireless_get_current_devs() == DEVS_USB && USB_DRIVER.state == USB_ACTIVE)) {
-                    rgb_matrix_wls_indicator_wls(wireless_get_current_devs());
-                }
-            } else {
-                // refresh led
-                led_wakeup();
-
-                return;
-            }
-        }
-
-        if ((timer_elapsed32(wls_rgb_indicator_timer) / wls_rgb_indicator_interval) % 2 == 0) {
-            rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.b);
-        } else {
-            rgb_matrix_set_color(wls_rgb_indicator_index, 0x00, 0x00, 0x00);
-        }
-    }
-}
-
-#    endif
-
-#endif
 
 bool rgb_matrix_indicators_kb() {
     if (!rgb_matrix_indicators_user()) {
