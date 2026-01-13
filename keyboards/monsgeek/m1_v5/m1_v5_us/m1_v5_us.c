@@ -21,16 +21,6 @@ typedef union {
 } confinfo_t;
 confinfo_t confinfo;
 
-typedef struct {
-    bool     active;
-    uint32_t timer;
-    uint32_t interval;
-    uint32_t times;
-    uint8_t  index;
-    RGB      rgb;
-    void (*blink_cb)(uint8_t);
-} hs_rgb_indicator_t;
-
 enum layers {
     _BL = 0,
     _FL,
