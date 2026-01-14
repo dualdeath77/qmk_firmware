@@ -7,66 +7,9 @@
 
 static ioline_t col_pins[MATRIX_COLS] = MATRIX_COL_PINS;
 
-bool hs_modeio_detection(bool update, uint8_t *mode, uint8_t lsat_btdev) {
-    static uint32_t scan_timer = 0x00;
-
-    if ((update != true) && (timer_elapsed32(scan_timer) <= (HS_MODEIO_DETECTION_TIME))) {
-        return false;
-    }
-    scan_timer = timer_read32();
-#if defined(HS_BT_DEF_PIN) && defined(HS_2G4_DEF_PIN)
-    uint8_t now_mode         = 0x00;
-    uint8_t hs_mode          = 0x00;
-    static uint8_t last_mode = 0x00;
-    bool sw_mode             = false;
-    now_mode                 = (HS_GET_MODE_PIN(HS_USB_PIN_STATE) ? 3 : (HS_GET_MODE_PIN(HS_BT_PIN_STATE) ? 1 : ((HS_GET_MODE_PIN(HS_2G4_PIN_STATE) ? 2 : 0))));
-    hs_mode                  = (*mode >= DEVS_BT1 && *mode <= DEVS_BT5) ? 1 : ((*mode == DEVS_2G4) ? 2 : ((*mode == DEVS_USB) ? 3 : 0));
-    sw_mode                  = ((update || (last_mode == now_mode)) && (hs_mode != now_mode)) ? true : false;
-    last_mode                = now_mode;
-
-    switch (now_mode) {
-        case 1:
-            *mode = hs_bt;
-            if (sw_mode) {
-                wireless_devs_change(wireless_get_current_devs(), lsat_btdev, false);
-            }
-            break;
-        case 2:
-            *mode = hs_2g4;
-            if (sw_mode) {
-                wireless_devs_change(wireless_get_current_devs(), DEVS_2G4, false);
-            }
-            break;
-        case 3:
-            *mode = hs_usb;
-            if (sw_mode)
-                wireless_devs_change(wireless_get_current_devs(), DEVS_USB, false);
-
-            break;
-        default:
-            break;
-    }
-
-    if (sw_mode) {
-        hs_rgb_blink_set_timer(timer_read32());
-        suspend_wakeup_init();
-        return true;
-    }
-#else
-    *mode = hs_none;
-#endif
-
-    return false;
-}
-
 static uint32_t hs_linker_rgb_timer = 0x00;
 
 bool hs_mode_scan(bool update, uint8_t moude, uint8_t lsat_btdev) {
-
-    if (hs_modeio_detection(update, &moude, lsat_btdev)) {
-
-        return true;
-    }
     hs_rgb_blink_hook();
     return false;
 }
@@ -78,6 +21,12 @@ void hs_rgb_blink_set_timer(uint32_t time) {
 uint32_t hs_rgb_blink_get_timer(void) {
     return hs_linker_rgb_timer;
 }
+
+// appears to track the keyboard state
+// sets hs_rgb_blink to the last state change
+// - if newly disconnected, try to reconnect once (broken, not sure if this ever worked)
+// - if disconnected for > timeout, then set to usb and low power
+// - if connected for greater than duration, manual timeout
 
 bool hs_rgb_blink_hook() {
     static uint8_t last_status;
@@ -121,19 +70,6 @@ bool hs_rgb_blink_hook() {
 }
 
 void lpwr_exti_init_hook(void) {
-
-#ifdef HS_BT_DEF_PIN
-    gpio_set_pin_input_high(HS_BT_DEF_PIN);
-    waitInputPinDelay();
-    palEnableLineEvent(HS_BT_DEF_PIN, PAL_EVENT_MODE_BOTH_EDGES);
-#endif
-
-#ifdef HS_2G4_DEF_PIN
-    gpio_set_pin_input_high(HS_2G4_DEF_PIN);
-    waitInputPinDelay();
-    palEnableLineEvent(HS_2G4_DEF_PIN, PAL_EVENT_MODE_BOTH_EDGES);
-#endif
-
     if (lower_sleep) {
 #if DIODE_DIRECTION == ROW2COL
         for (uint8_t i = 0; i < ARRAY_SIZE(col_pins); i++) {
@@ -153,20 +89,6 @@ void palcallback_cb(uint8_t line) {
     switch (line) {
         case PAL_PAD(HS_BAT_CABLE_PIN): {
             lpwr_set_sleep_wakeupcd(LPWR_WAKEUP_CABLE);
-        } break;
-#ifdef HS_BT_DEF_PIN
-        case PAL_PAD(HS_2G4_DEF_PIN): {
-            lpwr_set_sleep_wakeupcd(LPWR_WAKEUP_SWITCH);
-        } break;
-#endif
-
-#ifdef HS_2G4_DEF_PIN
-        case PAL_PAD(HS_BT_DEF_PIN): {
-            lpwr_set_sleep_wakeupcd(LPWR_WAKEUP_SWITCH);
-        } break;
-#endif
-        default: {
-
         } break;
     }
 }

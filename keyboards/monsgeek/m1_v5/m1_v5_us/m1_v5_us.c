@@ -6,11 +6,9 @@
 #include "module.h"
 #include "wls/wls.h"
 
-#ifdef WIRELESS_ENABLE
-#    include "wireless.h"
-#    include "usb_main.h"
-#    include "lowpower.h"
-#endif
+#include "wireless.h"
+#include "usb_main.h"
+#include "lowpower.h"
 
 typedef union {
     uint32_t raw;
@@ -21,6 +19,17 @@ typedef union {
     };
 } confinfo_t;
 confinfo_t confinfo;
+
+// uint32_t keyboard_state_changed_at = 0x00;
+// enum keyboard_state {
+//     KEYBOARD_STATE_CONNECTED,
+//     KEYBOARD_STATE_DISCONNECTED,
+//     KEYBOARD_STATE_CONNECTING,
+//     KEYBOARD_STATE_PAIRING,
+// };
+// enum keyboard_state get_keyboard_state() {
+//     return KEYBOARD_STATE_CONNECTED;
+// }
 
 enum layers {
     _BL = 0,
@@ -33,11 +42,19 @@ enum layers {
 #define keymap_is_mac_system() ((get_highest_layer(default_layer_state) == _MBL) || (get_highest_layer(default_layer_state) == _MFL))
 #define keymap_is_base_layer() ((get_highest_layer(default_layer_state) == _BL) || (get_highest_layer(default_layer_state) == _FL))
 
-uint32_t post_init_timer   = 0x00;
 bool     charging_state    = false;
 bool     battery_full_flag = false;
 HSV      start_hsv;
 bool     lower_sleep = false;
+
+uint32_t keyboard_init_deferred(uint32_t trigger_time, void *cb_arg) {
+    // auto switching devs
+    md_send_devctrl(MD_SND_CMD_DEVCTRL_FW_VERSION);   // get the module fw version.
+    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_BT_EN);  // timeout 30min to sleep in bt mode, enable
+    md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_2G4_EN); // timeout 30min to sleep in 2.4g mode, enable
+    wireless_devs_change(!confinfo.current_dev, confinfo.current_dev, false);
+    return 0;
+}
 
 void keyboard_post_init_kb(void) {
 #ifdef CONSOLE_ENABLE
@@ -53,77 +70,46 @@ void keyboard_post_init_kb(void) {
         eeconfig_update_kb(confinfo.raw);
     }
 
-#ifdef LED_POWER_EN_PIN
     gpio_set_pin_output(LED_POWER_EN_PIN);
     gpio_write_pin_high(LED_POWER_EN_PIN);
 
     gpio_set_pin_output(HS_LED_BOOSTING_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
-#endif
 
-#ifdef MM_BT_DEF_PIN
-    gpio_set_pin_input_high(MM_BT_DEF_PIN);
-#endif
-
-#ifdef MM_2G4_DEF_PIN
-    gpio_set_pin_input_high(MM_2G4_DEF_PIN);
-#endif
-
-#ifdef USB_POWER_EN_PIN
     gpio_write_pin_low(USB_POWER_EN_PIN);
     gpio_set_pin_output(USB_POWER_EN_PIN);
-#endif
 
-#ifdef HS_BAT_CABLE_PIN
     gpio_set_pin_input(HS_BAT_CABLE_PIN);
-#endif
 
-#ifdef BAT_FULL_PIN
     gpio_set_pin_input_high(BAT_FULL_PIN);
-#endif
 
     gpio_set_pin_input_high(SYSTEM_WIN_PIN);
     gpio_set_pin_input_high(SYSTEM_MAC_PIN);
 
-#ifdef WIRELESS_ENABLE
     wireless_init();
-#    if (!(defined(HS_BT_DEF_PIN) && defined(HS_2G4_DEF_PIN)))
     wireless_devs_change(!confinfo.current_dev, confinfo.current_dev, false);
-#    endif
-    post_init_timer = timer_read32();
-#endif
 
+    defer_exec(100, keyboard_init_deferred, NULL);
     keyboard_post_init_user();
 
     start_hsv = rgb_matrix_get_hsv();
 }
 
-#ifdef WIRELESS_ENABLE
-
 void usb_power_connect(void) {
-#    ifdef USB_POWER_EN_PIN
     gpio_write_pin_low(USB_POWER_EN_PIN);
-#    endif
 }
 
 void usb_power_disconnect(void) {
-#    ifdef USB_POWER_EN_PIN
     gpio_write_pin_high(USB_POWER_EN_PIN);
-#    endif
 }
 
 void suspend_power_down_kb(void) {
-#    ifdef LED_POWER_EN_PIN
     gpio_write_pin_low(LED_POWER_EN_PIN);
-#    endif
-
     suspend_power_down_user();
 }
 
 void suspend_wakeup_init_kb(void) {
-#    ifdef LED_POWER_EN_PIN
     gpio_write_pin_high(LED_POWER_EN_PIN);
-#    endif
 
     wireless_devs_change(wireless_get_current_devs(), wireless_get_current_devs(), false);
     suspend_wakeup_init_user();
@@ -131,63 +117,34 @@ void suspend_wakeup_init_kb(void) {
 }
 
 bool lpwr_is_allow_timeout_hook(void) {
-    if (wireless_get_current_devs() == DEVS_USB) {
-        return false;
-    }
-
-    return true;
+    return wireless_get_current_devs() != DEVS_USB;
 }
 
 void wireless_post_task(void) {
-    // auto switching devs
-    if (post_init_timer && timer_elapsed32(post_init_timer) >= 100) {
-        md_send_devctrl(MD_SND_CMD_DEVCTRL_FW_VERSION);   // get the module fw version.
-        md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_BT_EN);  // timeout 30min to sleep in bt mode, enable
-        md_send_devctrl(MD_SND_CMD_DEVCTRL_SLEEP_2G4_EN); // timeout 30min to sleep in 2.4g mode, enable
-        wireless_devs_change(!confinfo.current_dev, confinfo.current_dev, false);
-        post_init_timer = 0x00;
-    }
-
     hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
 }
 
 // i don't know what this does
-void m1v5_bt_test(void) {
-    md_send_devctrl(0x62);
-}
+// void m1v5_bt_test(void) {
+//     md_send_devctrl(0x62);
+// }
 
 static uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
     uint16_t keycode = *((uint16_t *)cb_arg);
 
     switch (keycode) {
         case KC_BT1: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                wireless_devs_change(wireless_get_current_devs(), DEVS_BT1, true);
-            }
+            wireless_devs_change(wireless_get_current_devs(), DEVS_BT1, true);
 
         } break;
         case KC_BT2: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                wireless_devs_change(wireless_get_current_devs(), DEVS_BT2, true);
-            }
+            wireless_devs_change(wireless_get_current_devs(), DEVS_BT2, true);
         } break;
         case KC_BT3: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                wireless_devs_change(wireless_get_current_devs(), DEVS_BT3, true);
-            }
+            wireless_devs_change(wireless_get_current_devs(), DEVS_BT3, true);
         } break;
         case KC_2G4: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
-                wireless_devs_change(wireless_get_current_devs(), DEVS_2G4, true);
-            }
+            wireless_devs_change(wireless_get_current_devs(), DEVS_2G4, true);
         } break;
         default:
             break;
@@ -196,15 +153,12 @@ static uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
     return 0;
 }
 
+// processes fn + wireless keys and also holding them
 static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
     static uint16_t       keycode_shadow               = 0x00;
     static deferred_token wls_process_long_press_token = INVALID_DEFERRED_TOKEN;
 
     keycode_shadow = keycode;
-
-#    ifndef WLS_KEYCODE_PAIR_TIME
-#        define WLS_KEYCODE_PAIR_TIME 3000
-#    endif
 
 #    define WLS_KEYCODE_EXEC(wls_dev)                                                                                          \
         do {                                                                                                                   \
@@ -221,46 +175,26 @@ static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 
     switch (keycode) {
         case KC_BT1: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                WLS_KEYCODE_EXEC(DEVS_BT1);
-                hs_rgb_blink_set_timer(timer_read32());
-            }
+            WLS_KEYCODE_EXEC(DEVS_BT1);
+            hs_rgb_blink_set_timer(timer_read32());
 
         } break;
         case KC_BT2: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                WLS_KEYCODE_EXEC(DEVS_BT2);
-                hs_rgb_blink_set_timer(timer_read32());
-            }
+            WLS_KEYCODE_EXEC(DEVS_BT2);
+            hs_rgb_blink_set_timer(timer_read32());
         } break;
         case KC_BT3: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_bt) || (mode == hs_wireless) || (mode == hs_none)) {
-                WLS_KEYCODE_EXEC(DEVS_BT3);
-                hs_rgb_blink_set_timer(timer_read32());
-            }
+            WLS_KEYCODE_EXEC(DEVS_BT3);
+            hs_rgb_blink_set_timer(timer_read32());
         } break;
         case KC_2G4: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
-                WLS_KEYCODE_EXEC(DEVS_2G4);
-                hs_rgb_blink_set_timer(timer_read32());
-            }
+            WLS_KEYCODE_EXEC(DEVS_2G4);
+            hs_rgb_blink_set_timer(timer_read32());
         } break;
 
         case KC_USB: {
-            uint8_t mode = confinfo.current_dev;
-            hs_modeio_detection(true, &mode, confinfo.last_bt_dev);
-            if ((mode == hs_2g4) || (mode == hs_wireless) || (mode == hs_none)) {
-                WLS_KEYCODE_EXEC(DEVS_USB);
-                hs_rgb_blink_set_timer(timer_read32());
-            }
+            WLS_KEYCODE_EXEC(DEVS_USB);
+            hs_rgb_blink_set_timer(timer_read32());
         } break;
         default:
             return true;
@@ -268,7 +202,6 @@ static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 
     return false;
 }
-#endif
 
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     // prevent timeout
@@ -280,19 +213,14 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
         return false;
     }
 
-#ifdef WIRELESS_ENABLE
     if (process_record_wls(keycode, record) != true) {
         return false;
     }
-#endif
 
     return true;
 }
 
 
-#ifdef RGB_MATRIX_ENABLE
-
-#    ifdef WIRELESS_ENABLE
 bool     wls_rgb_indicator_reset    = false;
 uint32_t wls_rgb_indicator_timer    = 0x00;
 uint32_t wls_rgb_indicator_interval = 0;
@@ -376,19 +304,11 @@ static void rgb_matrix_wls_indicator(void) {
     }
 }
 
-#    endif
-
-#endif
-
 void housekeeping_task_kb(void) { // loop
-#ifdef WIRELESS_ENABLE
     wireless_housekeeping_task();
-#ifdef RGB_MATRIX_ENABLE
     if (wls_rgb_indicator_timer && timer_elapsed32(wls_rgb_indicator_timer) > wls_rgb_indicator_timeout) {
         wls_rgb_indicator_timer = 0x00;
     }
-#endif
-#endif
 
     static uint32_t hs_current_time;
 
@@ -456,7 +376,6 @@ bool rgb_matrix_indicators_kb() {
     if (host_keyboard_led_state().caps_lock) rgb_matrix_set_color(HS_RGB_INDEX_CAPS, 0x20, 0x20, 0x20);
     if (!keymap_is_mac_system() && keymap_config.no_gui) rgb_matrix_set_color(HS_RGB_INDEX_WIN_LOCK, 0x20, 0x20, 0x20);
 
-#ifdef WIRELESS_ENABLE
     rgb_matrix_wls_indicator();
 
     if (charging_state && !battery_full_flag) {
@@ -474,7 +393,6 @@ bool rgb_matrix_indicators_kb() {
             rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0x00, 0x00);
         }
     }
-#endif
 
     return true;
 }
