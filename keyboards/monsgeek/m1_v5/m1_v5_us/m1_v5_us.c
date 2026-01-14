@@ -298,6 +298,7 @@ uint32_t wls_rgb_indicator_timer    = 0x00;
 uint32_t wls_rgb_indicator_interval = 0;
 // hide connecting after this amount of time
 // the keyboard does this by default, i guess to save battery?
+// also handles edge cases when the timer overflows
 uint32_t wls_rgb_indicator_timeout  = 5000;
 uint32_t wls_rgb_indicator_index    = 0;
 RGB      wls_rgb_indicator_rgb      = {0};
