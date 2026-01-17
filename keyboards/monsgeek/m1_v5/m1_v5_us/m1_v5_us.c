@@ -4,7 +4,6 @@
 #include "m1_v5_us.h"
 
 #include "module.h"
-#include "wls/wls.h"
 
 #include "wireless.h"
 #include "usb_main.h"
@@ -113,7 +112,6 @@ void suspend_wakeup_init_kb(void) {
 
     wireless_devs_change(wireless_get_current_devs(), wireless_get_current_devs(), false);
     suspend_wakeup_init_user();
-    hs_rgb_blink_set_timer(timer_read32());
 }
 
 bool lpwr_is_allow_timeout_hook(void) {
@@ -121,7 +119,6 @@ bool lpwr_is_allow_timeout_hook(void) {
 }
 
 void wireless_post_task(void) {
-    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
 }
 
 // i don't know what this does
@@ -176,25 +173,20 @@ static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case KC_BT1: {
             WLS_KEYCODE_EXEC(DEVS_BT1);
-            hs_rgb_blink_set_timer(timer_read32());
 
         } break;
         case KC_BT2: {
             WLS_KEYCODE_EXEC(DEVS_BT2);
-            hs_rgb_blink_set_timer(timer_read32());
         } break;
         case KC_BT3: {
             WLS_KEYCODE_EXEC(DEVS_BT3);
-            hs_rgb_blink_set_timer(timer_read32());
         } break;
         case KC_2G4: {
             WLS_KEYCODE_EXEC(DEVS_2G4);
-            hs_rgb_blink_set_timer(timer_read32());
         } break;
 
         case KC_USB: {
             WLS_KEYCODE_EXEC(DEVS_USB);
-            hs_rgb_blink_set_timer(timer_read32());
         } break;
         default:
             return true;
@@ -204,11 +196,6 @@ static bool process_record_wls(uint16_t keycode, keyrecord_t *record) {
 }
 
 bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
-    // prevent timeout
-    if (*md_getp_state() == MD_STATE_CONNECTED) {
-        hs_rgb_blink_set_timer(timer_read32());
-    }
-
     if (process_record_user(keycode, record) != true) {
         return false;
     }
@@ -398,8 +385,60 @@ bool rgb_matrix_indicators_kb() {
 }
 
 void lpwr_wakeup_hook(void) {
-    hs_mode_scan(false, confinfo.current_dev, confinfo.last_bt_dev);
-
     gpio_write_pin_high(LED_POWER_EN_PIN);
     gpio_write_pin_high(HS_LED_BOOSTING_PIN);
+}
+
+static ioline_t col_pins[MATRIX_COLS] = MATRIX_COL_PINS;
+
+void lpwr_exti_init_hook(void) {
+    if (lower_sleep) {
+#if DIODE_DIRECTION == ROW2COL
+        for (uint8_t i = 0; i < ARRAY_SIZE(col_pins); i++) {
+            if (col_pins[i] != NO_PIN) {
+                gpio_set_pin_output_push_pull(col_pins[i]);
+                gpio_write_pin_high(col_pins[i]);
+            }
+        }
+#endif
+    }
+    gpio_set_pin_input(HS_BAT_CABLE_PIN);
+    waitInputPinDelay();
+    palEnableLineEvent(HS_BAT_CABLE_PIN, PAL_EVENT_MODE_RISING_EDGE);
+}
+
+void palcallback_cb(uint8_t line) {
+    switch (line) {
+        case PAL_PAD(HS_BAT_CABLE_PIN): {
+            lpwr_set_sleep_wakeupcd(LPWR_WAKEUP_CABLE);
+        } break;
+    }
+}
+
+void lpwr_stop_hook_pre(void) {
+
+    gpio_write_pin_low(LED_POWER_EN_PIN);
+    gpio_write_pin_low(A9);
+    gpio_write_pin_low(HS_LED_BOOSTING_PIN);
+
+    if (lower_sleep) {
+        md_send_devctrl(MD_SND_CMD_DEVCTRL_USB);
+        wait_ms(200);
+        lpwr_set_sleep_wakeupcd(LPWR_WAKEUP_UART);
+    }
+}
+
+void lpwr_stop_hook_post(void) {
+    if (lower_sleep) {
+        switch (lpwr_get_sleep_wakeupcd()) {
+            case LPWR_WAKEUP_USB:
+            case LPWR_WAKEUP_CABLE: {
+                lower_sleep = false;
+                lpwr_set_state(LPWR_WAKEUP);
+            } break;
+            default: {
+                lpwr_set_state(LPWR_STOP);
+            } break;
+        }
+    }
 }

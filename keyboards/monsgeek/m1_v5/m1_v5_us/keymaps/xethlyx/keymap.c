@@ -1,10 +1,11 @@
 // Copyright 2024 yangzheng20003 (@yangzheng20003)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <math.h>
 #include "lowpower.h"
 #include "module.h"
-#include "wls/wls.h"
 #include QMK_KEYBOARD_H
+#include "usb_device_state.h"
 
 enum layers {
     _BL = 0,
@@ -78,6 +79,9 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 // clang-format on
 
+extern uint32_t wls_rgb_indicator_timer;
+extern bool wls_rgb_indicator_reset;
+
 bool rk_bat_req_flag;
 
 #define KEEP_AWAKE_INTERVAL 5000
@@ -96,7 +100,9 @@ uint32_t keep_awake_callback(uint32_t trigger_time, void *cb_arg) {
 
     // prevent timeout
     if (*md_getp_state() == MD_STATE_CONNECTED) {
-        hs_rgb_blink_set_timer(timer_read32());
+        // todo: modify last_input_activity_elapsed from quantum/keyboard.h
+        // checked in moduoles/westberry/wireless/lowpower.c/lpwr_set_timeout_manual
+        set_activity_timestamps(timer_read32(), last_encoder_activity_time(), last_pointing_device_activity_time());
     }
 
     status = !status;
@@ -177,5 +183,37 @@ bool rgb_matrix_indicators_user() {
         }
     }
 
+    static uint8_t connecting[] = { 0xFC, 0xB2, 0x03 };
+    static uint8_t pairing[] = { 0x00, 0x00, 0xFF };
+    // static uint8_t connected[] = { 0x00, 0xFF, 0x00 };
+    if (wls_rgb_indicator_timer) {
+        uint8_t *color = wls_rgb_indicator_reset ? pairing : connecting;
+
+        for (uint8_t i = 0; i < 14; i++) {
+            float diff = timer_elapsed32(wls_rgb_indicator_timer);
+            float dim = 0.5f + 0.5f * (sinf(i / 2.0f + diff / 100.0f)); // range [0.5,1]
+            rgb_matrix_set_color(10 + i, color[0] * dim, color[1] * dim, color[2] * dim);
+        }
+    }
+
     return true;
 }
+
+// void notify_usb_device_state_change_user(struct usb_device_state usb_device_state) {
+//     if (usb_device_state.configure_state == USB_DEVICE_STATE_CONFIGURED) {
+//         wls_rgb_indicator_timer = 0x00;
+//     }
+// }
+
+// bool md_receive_process_user(uint8_t *pdata, uint8_t len) {
+//     switch (pdata[0]) {
+//         case MD_REV_CMD_DEVCTRL: {
+//             switch (pdata[1]) {
+//                 case MD_REV_CMD_DEVCTRL_CONNECTED: {
+//                     wls_rgb_indicator_timer = 0x00;
+//                 } break;
+//             }
+//         }
+//     }
+//     return true;
+// }
