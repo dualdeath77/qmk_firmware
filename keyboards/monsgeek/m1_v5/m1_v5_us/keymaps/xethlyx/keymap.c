@@ -218,12 +218,12 @@ bool rgb_matrix_indicators_user() {
                 bar_fade(connected, kb_state.changed_at, 2000);
             } break;
             case MD_STATE_PAIRING: {
-                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if (MIN(timer_elapsed32(kb_state.changed_at), last_matrix_activity_elapsed()) > INDICATOR_TIMEOUT) break;
                 bar_sin(pairing, kb_state.changed_at);
             } break;
 
             default: {
-                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if (MIN(timer_elapsed32(kb_state.changed_at), last_matrix_activity_elapsed()) > INDICATOR_TIMEOUT) break;
                 bar_sin(connecting, kb_state.changed_at);
             } break;
         }

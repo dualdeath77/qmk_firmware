@@ -249,7 +249,7 @@ static void rgb_matrix_wls_indicator(void) {
         switch (kb_state.status) {
             case USB_ACTIVE: break;
             default: {
-                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if (MIN(timer_elapsed32(kb_state.changed_at), last_matrix_activity_elapsed()) > INDICATOR_TIMEOUT) break;
                 if ((timer_elapsed32(kb_state.changed_at) / 500) % 2 == 0) {
                     rgb_matrix_set_color(dev_info.key, dev_info.color.r, dev_info.color.g, dev_info.color.b);
                 }
@@ -266,7 +266,7 @@ static void rgb_matrix_wls_indicator(void) {
             } break;
 
             default: {
-                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if (MIN(timer_elapsed32(kb_state.changed_at), last_matrix_activity_elapsed()) > INDICATOR_TIMEOUT) break;
                 if ((timer_elapsed32(kb_state.changed_at) / 500) % 2 == 0) {
                     rgb_matrix_set_color(dev_info.key, dev_info.color.r, dev_info.color.g, dev_info.color.b);
                 }
