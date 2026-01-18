@@ -110,11 +110,6 @@ bool lpwr_is_allow_timeout_hook(void) {
 void wireless_post_task(void) {
 }
 
-// i don't know what this does
-// void m1v5_bt_test(void) {
-//     md_send_devctrl(0x62);
-// }
-
 static uint32_t wls_process_long_press(uint32_t trigger_time, void *cb_arg) {
     uint16_t keycode = *((uint16_t *)cb_arg);
 

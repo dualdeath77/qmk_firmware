@@ -84,13 +84,13 @@ typedef union {
         uint8_t ctrl_act_as_menu : 1;
     };
 } eeconfig_user_t;
-eeconfig_user_t confinfo;
+eeconfig_user_t confinfo_user;
 
 void eeconfig_init_user() {
-    confinfo.raw = eeconfig_read_user();
-    if (!confinfo.raw) {
-        confinfo.wasd_act_as_directional = 0;
-        confinfo.ctrl_act_as_menu        = 0;
+    confinfo_user.raw = eeconfig_read_user();
+    if (!confinfo_user.raw) {
+        confinfo_user.wasd_act_as_directional = 0;
+        confinfo_user.ctrl_act_as_menu        = 0;
     }
 }
 
@@ -101,7 +101,10 @@ void     m1v5_blink(void) {
     blink_timer = timer_read32();
 }
 
-void m1v5_bt_test(void);
+// i don't know what this does
+void m1v5_bt_test(void) {
+    md_send_devctrl(0x62);
+}
 
 uint32_t ee_clr_callback(uint32_t trigger_time, void *cb_arg) {
     eeconfig_init();
@@ -110,9 +113,9 @@ uint32_t ee_clr_callback(uint32_t trigger_time, void *cb_arg) {
 }
 
 uint32_t ctrl_act_as_menu_callback(uint32_t trigger_time, void *cb_arg) {
-    confinfo.ctrl_act_as_menu = !confinfo.ctrl_act_as_menu;
+    confinfo_user.ctrl_act_as_menu = !confinfo_user.ctrl_act_as_menu;
     m1v5_blink();
-    eeconfig_update_user(confinfo.raw);
+    eeconfig_update_user(confinfo_user.raw);
     return 0;
 }
 
@@ -139,7 +142,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_A: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_LEFT);
                 } else {
@@ -150,7 +153,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_S: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_DOWN);
                 } else {
@@ -161,7 +164,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_D: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_RGHT);
                 } else {
@@ -172,7 +175,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_W: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_UP);
                 } else {
@@ -185,7 +188,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_LEFT: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_A);
                 } else {
@@ -196,7 +199,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_DOWN: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_S);
                 } else {
@@ -207,7 +210,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_RGHT: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_D);
                 } else {
@@ -218,7 +221,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_UP: {
-            if (confinfo.wasd_act_as_directional) {
+            if (confinfo_user.wasd_act_as_directional) {
                 if (record->event.pressed) {
                     register_code16(KC_W);
                 } else {
@@ -229,7 +232,7 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
         } break;
 
         case KC_RCTL: {
-            if (confinfo.ctrl_act_as_menu) {
+            if (confinfo_user.ctrl_act_as_menu) {
                 if (record->event.pressed) {
                     register_code16(KC_APP);
                 } else {
@@ -243,9 +246,9 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
 
         case HS_DIR: {
             if (record->event.pressed) {
-                confinfo.wasd_act_as_directional = !confinfo.wasd_act_as_directional;
+                confinfo_user.wasd_act_as_directional = !confinfo_user.wasd_act_as_directional;
                 m1v5_blink();
-                eeconfig_update_user(confinfo.raw);
+                eeconfig_update_user(confinfo_user.raw);
             }
             return false;
         } break;
