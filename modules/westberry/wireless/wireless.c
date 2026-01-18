@@ -220,6 +220,8 @@ void wireless_devs_change(uint8_t old_devs, uint8_t new_devs, bool reset) {
     last_matrix_activity_trigger();
 
     md_devs_change(new_devs, reset);
+    md_state_change_kb();
+    md_state_change_user();
     wireless_devs_change_kb(old_devs, new_devs, reset);
     wireless_devs_change_user(old_devs, new_devs, reset);
 }

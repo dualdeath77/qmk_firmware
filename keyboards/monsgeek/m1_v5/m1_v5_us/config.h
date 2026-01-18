@@ -4,6 +4,7 @@
 #pragma once
 
 #define WLS_KEYCODE_PAIR_TIME               3000
+#define INDICATOR_TIMEOUT                   10000
 
 #define USB_POWER_EN_PIN                    B1 // USB ENABLE pin
 #define LED_POWER_EN_PIN                    A5 // LED ENABLE pin

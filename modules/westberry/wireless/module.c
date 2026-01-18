@@ -216,6 +216,8 @@ static void md_receive_msg_task(void) {
                         default:
                             break;
                     }
+                    md_state_change_kb();
+                    md_state_change_user();
                 } break;
                 case MD_REV_CMD_BATVOL: {
                     md_info.bat = md_rev_payload[1];
@@ -446,6 +448,12 @@ void md_send_raw(uint8_t *data, uint8_t length) {
     md_calc_check_sum(sdata, sizeof(sdata) - 1);
     smsg_push(sdata, sizeof(sdata));
 }
+
+void md_state_change_kb(void) __attribute__((weak));
+void md_state_change_kb(void) {}
+
+void md_state_change_user(void) __attribute__((weak));
+void md_state_change_user(void) {}
 
 void md_devs_change(uint8_t devs, bool reset) __attribute__((weak));
 void md_devs_change(uint8_t devs, bool reset) {

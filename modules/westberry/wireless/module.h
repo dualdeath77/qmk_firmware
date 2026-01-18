@@ -118,6 +118,8 @@ void md_send_pkt(uint8_t *data, uint32_t len);
 bool md_receive_process_kb(uint8_t *pdata, uint8_t len);
 bool md_receive_process_user(uint8_t *pdata, uint8_t len);
 void md_devs_change(uint8_t devs, bool reset);
+void md_state_change_kb(void);
+void md_state_change_user(void);
 bool md_inquire_bat(void);
 uint8_t md_get_version(void);
 uint8_t *md_getp_state(void);

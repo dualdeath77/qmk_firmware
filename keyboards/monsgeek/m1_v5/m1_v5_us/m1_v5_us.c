@@ -19,17 +19,6 @@ typedef union {
 } confinfo_t;
 confinfo_t confinfo;
 
-// uint32_t keyboard_state_changed_at = 0x00;
-// enum keyboard_state {
-//     KEYBOARD_STATE_CONNECTED,
-//     KEYBOARD_STATE_DISCONNECTED,
-//     KEYBOARD_STATE_CONNECTING,
-//     KEYBOARD_STATE_PAIRING,
-// };
-// enum keyboard_state get_keyboard_state() {
-//     return KEYBOARD_STATE_CONNECTED;
-// }
-
 enum layers {
     _BL = 0,
     _FL,
@@ -207,95 +196,88 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+struct kb_state_t kb_state = {
+    // this is so high it will surely trigger an update
+    .dev = 99
+};
 
-bool     wls_rgb_indicator_reset    = false;
-uint32_t wls_rgb_indicator_timer    = 0x00;
-uint32_t wls_rgb_indicator_interval = 0;
-// hide connecting after this amount of time
-// the keyboard does this by default, i guess to save battery?
-// also handles edge cases when the timer overflows
-uint32_t wls_rgb_indicator_timeout  = 5000;
-uint32_t wls_rgb_indicator_index    = 0;
-RGB      wls_rgb_indicator_rgb      = {0};
+kb_dev_info_t kb_dev_info[5] = {
+    { .key = HS_RGB_BLINK_INDEX_USB, .color = { HS_LBACK_COLOR_USB } },
+    { .key = HS_RGB_BLINK_INDEX_BT1, .color = { HS_LBACK_COLOR_BT1 } },
+    { .key = HS_RGB_BLINK_INDEX_BT2, .color = { HS_LBACK_COLOR_BT2 } },
+    { .key = HS_RGB_BLINK_INDEX_BT3, .color = { HS_LBACK_COLOR_BT3 } },
+    { .key = HS_RGB_BLINK_INDEX_2G4, .color = { HS_LBACK_COLOR_2G4 } },
+};
 
-static void rgb_matrix_wls_indicator_set(uint8_t index, RGB rgb, uint32_t interval) {
-    wls_rgb_indicator_timer = timer_read32();
+void update_kb_state(void) {
+    uint8_t dev = wireless_get_current_devs();
 
-    wls_rgb_indicator_index    = index;
-    wls_rgb_indicator_interval = interval;
-    wls_rgb_indicator_rgb      = rgb;
-}
-
-static void rgb_matrix_wls_indicator_wls(uint8_t devs) {
-    uint32_t interval = wls_rgb_indicator_reset ? 200 : 500;
-
-    switch (devs) {
-        case DEVS_USB: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_USB, (RGB){HS_LBACK_COLOR_USB}, interval);
-        } break;
-        case DEVS_BT1: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT1, (RGB){HS_LBACK_COLOR_BT1}, interval);
-        } break;
-        case DEVS_BT2: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT2, (RGB){HS_LBACK_COLOR_BT2}, interval);
-        } break;
-        case DEVS_BT3: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_BT3, (RGB){HS_LBACK_COLOR_BT3}, interval);
-        } break;
-        case DEVS_2G4: {
-            rgb_matrix_wls_indicator_set(HS_RGB_BLINK_INDEX_2G4, (RGB){HS_LBACK_COLOR_2G4}, interval);
-        } break;
+    uint8_t status = dev == DEVS_USB ? USB_DRIVER.state : *md_getp_state();
+    if (dev == kb_state.dev && status == kb_state.status) {
+        return;
     }
+
+    kb_state.dev = dev;
+    kb_state.status = status;
+    kb_state.changed_at = timer_read32();
 }
 
 void wireless_devs_change_kb(uint8_t old_devs, uint8_t new_devs, bool reset) {
-    wls_rgb_indicator_reset = reset;
+    update_kb_state();
 
     if (confinfo.current_dev != wireless_get_current_devs()) {
         confinfo.current_dev = wireless_get_current_devs();
         if (confinfo.current_dev > 0 && confinfo.current_dev < 4) confinfo.last_bt_dev = confinfo.current_dev;
         eeconfig_update_kb(confinfo.raw);
     }
-
-    rgb_matrix_wls_indicator_wls(new_devs);
 }
 
 void notify_usb_device_state_change_kb(struct usb_device_state usb_device_state) {
-    if (usb_device_state.configure_state == USB_DEVICE_STATE_CONFIGURED) {
-        wls_rgb_indicator_timer = 0x00;
-    }
+    update_kb_state();
     notify_usb_device_state_change_user(usb_device_state);
 }
 
-bool md_receive_process_kb(uint8_t *pdata, uint8_t len) {
-    switch (pdata[0]) {
-        case MD_REV_CMD_DEVCTRL: {
-            switch (pdata[1]) {
-                case MD_REV_CMD_DEVCTRL_CONNECTED: {
-                    wls_rgb_indicator_timer = 0x00;
-                } break;
-            }
-        }
-    }
-    md_receive_process_user(pdata, len);
-    return true;
+void md_state_change_kb(void) {
+    update_kb_state();
 }
 
 static void rgb_matrix_wls_indicator(void) {
-    if (wls_rgb_indicator_timer) {
-        if ((timer_elapsed32(wls_rgb_indicator_timer) / wls_rgb_indicator_interval) % 2 == 0) {
-            rgb_matrix_set_color(wls_rgb_indicator_index, wls_rgb_indicator_rgb.r, wls_rgb_indicator_rgb.g, wls_rgb_indicator_rgb.b);
-        } else {
-            rgb_matrix_set_color(wls_rgb_indicator_index, 0x00, 0x00, 0x00);
+    if (kb_state.dev >= 5) return; // not initialized, just in case
+    kb_dev_info_t dev_info = kb_dev_info[kb_state.dev];
+
+    if (kb_state.dev == DEVS_USB) {
+        switch (kb_state.status) {
+            case USB_ACTIVE: break;
+            default: {
+                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if ((timer_elapsed32(kb_state.changed_at) / 500) % 2 == 0) {
+                    rgb_matrix_set_color(dev_info.key, dev_info.color.r, dev_info.color.g, dev_info.color.b);
+                }
+            } break;
         }
+
+    } else {
+        switch (kb_state.status) {
+            case MD_STATE_CONNECTED: break;
+            case MD_STATE_PAIRING: {
+                if ((timer_elapsed32(kb_state.changed_at) / 200) % 2 == 0) {
+                    rgb_matrix_set_color(dev_info.key, dev_info.color.r, dev_info.color.g, dev_info.color.b);
+                }
+            } break;
+
+            default: {
+                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                if ((timer_elapsed32(kb_state.changed_at) / 500) % 2 == 0) {
+                    rgb_matrix_set_color(dev_info.key, dev_info.color.r, dev_info.color.g, dev_info.color.b);
+                }
+            } break;
+        }
+
     }
 }
 
 void housekeeping_task_kb(void) { // loop
     wireless_housekeeping_task();
-    if (wls_rgb_indicator_timer && timer_elapsed32(wls_rgb_indicator_timer) > wls_rgb_indicator_timeout) {
-        wls_rgb_indicator_timer = 0x00;
-    }
 
     static uint32_t hs_current_time;
 

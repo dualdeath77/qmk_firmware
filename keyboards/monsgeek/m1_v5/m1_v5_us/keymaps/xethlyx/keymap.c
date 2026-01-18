@@ -4,6 +4,7 @@
 #include <math.h>
 #include "lowpower.h"
 #include "module.h"
+#include "usb_main.h"
 #include QMK_KEYBOARD_H
 #include "usb_device_state.h"
 
@@ -79,9 +80,6 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 
 // clang-format on
 
-extern uint32_t wls_rgb_indicator_timer;
-extern bool wls_rgb_indicator_reset;
-
 bool rk_bat_req_flag;
 
 #define KEEP_AWAKE_INTERVAL 5000
@@ -100,9 +98,7 @@ uint32_t keep_awake_callback(uint32_t trigger_time, void *cb_arg) {
 
     // prevent timeout
     if (*md_getp_state() == MD_STATE_CONNECTED) {
-        // todo: modify last_input_activity_elapsed from quantum/keyboard.h
-        // checked in moduoles/westberry/wireless/lowpower.c/lpwr_set_timeout_manual
-        set_activity_timestamps(timer_read32(), last_encoder_activity_time(), last_pointing_device_activity_time());
+        last_matrix_activity_time();
     }
 
     status = !status;
@@ -154,6 +150,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     return true;
 }
 
+void bar_sin(RGB color, uint32_t timer) {
+    float diff = timer_elapsed32(timer);
+    for (uint8_t i = 0; i < 14; i++) {
+        float dim = 0.5f + 0.5f * (sinf(i / 2.0f + diff / 100.0f)); // range [0.5,1]
+        rgb_matrix_set_color(10 + i, color.r * dim, color.g * dim, color.b * dim);
+    }
+}
+
+void bar_fade(RGB color, uint32_t timer, uint32_t duration) {
+    uint32_t diff = timer_elapsed32(timer);
+    if (diff >= duration) return;
+    float dim = (float)(duration - diff) / (float)duration;
+    for (uint8_t i = 0; i < 14; i++) {
+        rgb_matrix_set_color(10 + i, color.r * dim, color.g * dim, color.b * dim);
+    }
+}
+
 bool rgb_matrix_indicators_user() {
     if (rk_bat_req_flag) {
         rgb_matrix_set_color_all(0x00, 0x00, 0x00);
@@ -183,37 +196,38 @@ bool rgb_matrix_indicators_user() {
         }
     }
 
-    static uint8_t connecting[] = { 0xFC, 0xB2, 0x03 };
-    static uint8_t pairing[] = { 0x00, 0x00, 0xFF };
-    // static uint8_t connected[] = { 0x00, 0xFF, 0x00 };
-    if (wls_rgb_indicator_timer) {
-        uint8_t *color = wls_rgb_indicator_reset ? pairing : connecting;
+    static RGB connecting = { 0xFC, 0xB2, 0x03 };
+    static RGB pairing = { 0x00, 0x00, 0xFF };
+    static RGB connected = { 0x00, 0xFF, 0x00 };
 
-        for (uint8_t i = 0; i < 14; i++) {
-            float diff = timer_elapsed32(wls_rgb_indicator_timer);
-            float dim = 0.5f + 0.5f * (sinf(i / 2.0f + diff / 100.0f)); // range [0.5,1]
-            rgb_matrix_set_color(10 + i, color[0] * dim, color[1] * dim, color[2] * dim);
+    if (kb_state.dev == DEVS_USB) {
+        switch (kb_state.status) {
+            case USB_ACTIVE: {
+                bar_fade(connected, kb_state.changed_at, 2000);
+            } break;
+            case USB_SELECTED: {
+                bar_sin(connected, kb_state.changed_at);
+            } break;
+            default: {
+                bar_sin(connecting, kb_state.changed_at);
+            } break;
+        }
+    } else {
+        switch (kb_state.status) {
+            case MD_STATE_CONNECTED: {
+                bar_fade(connected, kb_state.changed_at, 2000);
+            } break;
+            case MD_STATE_PAIRING: {
+                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                bar_sin(pairing, kb_state.changed_at);
+            } break;
+
+            default: {
+                if (timer_elapsed32(kb_state.changed_at) > INDICATOR_TIMEOUT) break;
+                bar_sin(connecting, kb_state.changed_at);
+            } break;
         }
     }
 
     return true;
 }
-
-// void notify_usb_device_state_change_user(struct usb_device_state usb_device_state) {
-//     if (usb_device_state.configure_state == USB_DEVICE_STATE_CONFIGURED) {
-//         wls_rgb_indicator_timer = 0x00;
-//     }
-// }
-
-// bool md_receive_process_user(uint8_t *pdata, uint8_t len) {
-//     switch (pdata[0]) {
-//         case MD_REV_CMD_DEVCTRL: {
-//             switch (pdata[1]) {
-//                 case MD_REV_CMD_DEVCTRL_CONNECTED: {
-//                     wls_rgb_indicator_timer = 0x00;
-//                 } break;
-//             }
-//         }
-//     }
-//     return true;
-// }
