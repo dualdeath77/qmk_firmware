@@ -98,7 +98,11 @@ uint32_t keep_awake_callback(uint32_t trigger_time, void *cb_arg) {
 
     // prevent timeout
     if (*md_getp_state() == MD_STATE_CONNECTED) {
-        last_matrix_activity_time();
+        set_activity_timestamps(
+            sync_timer_read32(),
+            last_encoder_activity_time(),
+            last_pointing_device_activity_time()
+        );
     }
 
     status = !status;
@@ -107,6 +111,13 @@ uint32_t keep_awake_callback(uint32_t trigger_time, void *cb_arg) {
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
+        case QK_BOOT: {
+            // prevent keyboard from entering bootloader when in my bag
+            if (USB_DRIVER.state == USB_SUSPENDED || USB_DRIVER.state == USB_STOP) {
+                return false;
+            }
+        } break;
+
         case CUSTOM_CAPS: {
             if (record->event.pressed) {
                 register_code(KC_LALT);
