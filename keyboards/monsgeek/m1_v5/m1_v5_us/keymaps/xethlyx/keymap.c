@@ -20,6 +20,7 @@ enum custom_keycodes {
     HS_BATQ = SAFE_RANGE,
     CUSTOM_CAPS,
     KEEP_AWAKE,
+    SYSRQ_TOGGLE,
 };
 
 #define ______ HS_BLACK
@@ -36,7 +37,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,  KC_LCMD,  KC_LALT,                      KC_SPC,                                 KC_RALT,  MO(_FL),  KC_RCTL,  KC_LEFT,  KC_DOWN,  KC_RGHT),
 
     [_FL] = LAYOUT( /* Function Layer */
-        _______,  KC_MYCM,  KC_MAIL,  KC_WSCH,  KC_WHOM,  KC_MSEL,  KC_MPLY,  KC_MPRV,  KC_MNXT,  _______,  _______,  _______,  _______,  RGB_MOD,  _______,
+        _______,  KC_MYCM,  KC_MAIL,  KC_WSCH,  KC_WHOM,  KC_MSEL,  KC_MPLY,  KC_MPRV,  KC_MNXT,  _______,  _______,  _______,  _______,  RGB_MOD,  SYSRQ_TOGGLE,
         _______,   _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  RGB_SPD,  RGB_SPI,  _______,  _______,
         QK_RBT,  _______,  _______,   KC_BT1,   KC_BT2,   KC_BT3,   KC_2G4,   KC_USB,   KC_INS,   _______,  KC_PSCR,  _______,  _______,  _______,  _______,
         KC_CAPS,  _______, _______,  _______,  _______,   _______,  _______,  KEEP_AWAKE,  _______,  RGB_TOG,  _______,  _______,            _______,  _______,
@@ -81,6 +82,7 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 // clang-format on
 
 bool rk_bat_req_flag;
+bool sysrq_pressed;
 
 #define KEEP_AWAKE_INTERVAL 5000
 uint32_t keep_awake_timer;
@@ -156,6 +158,20 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             rk_bat_req_flag = record->event.pressed;
             return false;
         } break;
+
+        case SYSRQ_TOGGLE: {
+            if (record->event.pressed) {
+                if (sysrq_pressed) {
+                    unregister_code(KC_RIGHT_ALT);
+                    unregister_code(KC_PRINT_SCREEN);
+                    sysrq_pressed = false;
+                } else {
+                    register_code(KC_RIGHT_ALT);
+                    register_code(KC_PRINT_SCREEN);
+                    sysrq_pressed = true;
+                }
+            }
+        } break;
     }
 
     return true;
@@ -179,6 +195,12 @@ void bar_fade(RGB color, uint32_t timer, uint32_t duration) {
 }
 
 bool rgb_matrix_indicators_user() {
+    if (sysrq_pressed) {
+        for (uint8_t i =0; i < RGB_MATRIX_LED_COUNT; i++) {
+            rgb_matrix_set_color(i, 0xFF, 0x00, 0x00);
+        }
+    }
+
     if (rk_bat_req_flag) {
         rgb_matrix_set_color_all(0x00, 0x00, 0x00);
         for (uint8_t i = 0; i < 10; i++) {
