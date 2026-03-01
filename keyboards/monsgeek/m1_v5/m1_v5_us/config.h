@@ -5,6 +5,7 @@
 
 #define WLS_KEYCODE_PAIR_TIME               3000
 #define INDICATOR_TIMEOUT                   10000
+#define RGB_MATRIX_TIMEOUT                  30000
 
 #define USB_POWER_EN_PIN                    B1 // USB ENABLE pin
 #define LED_POWER_EN_PIN                    A5 // LED ENABLE pin
@@ -43,6 +44,19 @@
 #define HS_MATRIX_BLINK_INDEX_BAT           1
 #define HS_RGB_INDEX_CAPS                   52
 #define HS_RGB_INDEX_WIN_LOCK               79
+
+/* NumLock */
+#define HS_RGB_INDEX_NUM_1                  53
+#define HS_RGB_INDEX_NUM_2                  54
+#define HS_RGB_INDEX_NUM_3                  55
+#define HS_RGB_INDEX_NUM_4                  50      
+#define HS_RGB_INDEX_NUM_5                  49
+#define HS_RGB_INDEX_NUM_6                  48
+#define HS_RGB_INDEX_NUM_7                  25
+#define HS_RGB_INDEX_NUM_8                  26
+#define HS_RGB_INDEX_NUM_9                  27
+#define HS_RGB_INDEX_NUM_0                  76
+#define HS_RGB_INDEX_NUM_PRD                75
 
 #define HS_RGB_BLINK_INDEX_WIN              53
 #define HS_RGB_BLINK_INDEX_MAC              54

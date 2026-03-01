@@ -336,14 +336,34 @@ bool rgb_matrix_indicators_kb() {
     if (!rgb_matrix_indicators_user()) {
         return false;
     }
-
-    if (host_keyboard_led_state().caps_lock) rgb_matrix_set_color(HS_RGB_INDEX_CAPS, 0x20, 0x20, 0x20);
+    uint8_t brightness = rgb_matrix_get_val();
+    rgb_matrix_set_color(
+        20,
+        (20 * brightness) / 255,  // R
+        (255   * brightness) / 255,  // G
+        (20   * brightness) / 255   // B
+    );
+    rgb_matrix_set_color(
+        16,
+        (20 * brightness) / 255,  // R
+        (255   * brightness) / 255,  // G
+        (20   * brightness) / 255   // B
+    );
+    rgb_matrix_set_color(
+        15,
+        (20 * brightness) / 255,  // R
+        (255   * brightness) / 255,  // G
+        (20   * brightness) / 255   // B
+    );
+    // rgb_matrix_set_color(16, 0x20, 0xFF, 0x20);
+    // rgb_matrix_set_color(15, 0x20, 0xFF, 0x20);
+    // if (host_keyboard_led_state().caps_lock) rgb_matrix_set_color_all(0x20, 0x20, 0x20);
     if (!keymap_is_mac_system() && keymap_config.no_gui) rgb_matrix_set_color(HS_RGB_INDEX_WIN_LOCK, 0x20, 0x20, 0x20);
 
     rgb_matrix_wls_indicator();
 
     if (charging_state && !battery_full_flag) {
-        rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0xFF, 0x00);
+    //    rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0xFF, 0x00);
     } else if (*md_getp_bat() <= BATTERY_CAPACITY_LOW) {
         static uint32_t battery_flash_timer;
 
