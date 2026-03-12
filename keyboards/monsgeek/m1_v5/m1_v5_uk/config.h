@@ -8,6 +8,8 @@
 #define HS_BAT_CABLE_PIN                    A7 // USB insertion detection pin
 #define HS_LED_BOOSTING_PIN                 D2 // LED BOOSTING
 
+#define RGB_MATRIX_TIMEOUT                  120000
+
 #define BAT_FULL_PIN                        A15
 #define BAT_FULL_STATE                      1
 
@@ -55,11 +57,9 @@
 #define SYSTEM_MAC_PIN                      C14
 
 /* UART */
-#define UART_DRIVER                         SD3
-#define UART_TX_PIN                         C10
-#define UART_TX_PAL_MODE                    7
-#define UART_RX_PIN                         C11
-#define UART_RX_PAL_MODE                    7
+#define SERIAL_DRIVER                       SD3
+#define SD1_TX_PIN                          C10
+#define SD1_RX_PIN                          C11
 
 /* Encoder */
 #define ENCODER_MAP_KEY_DELAY               1

@@ -66,9 +66,10 @@ static uint32_t ee_clr_timer = 0;
 static uint32_t rec_time;
 bool test_white_light_flag = false;
 HSV start_hsv;
-bool no_record_fg;
+bool no_record_fg,im_test_rate_flag;
 bool lower_sleep = false;
 uint8_t buff[]   = {14, 8, 2, 1, 1, 1, 1, 1, 1, 1, 0};
+uint8_t chg_ind = 0;
 
 void eeconfig_confinfo_update(uint32_t raw) {
 
@@ -722,6 +723,16 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
             rk_bat_req_flag = (confinfo.devs != DEVS_USB) && record->event.pressed;
             return false;
         } break;
+        case HS_BATI: {
+            if (!record->event.pressed){
+                if (chg_ind == 0){
+                    chg_ind = 1;
+                }
+                else if (chg_ind == 1){
+                    chg_ind = 0;
+                }
+            } return false;
+        } break;
         case HS_DIR: {
             if (record->event.pressed) {
                 confinfo.dir_flag = !confinfo.dir_flag;
@@ -1107,10 +1118,11 @@ void bat_indicators(void) {
     } else if (charging_state) {
 
         battery_process_time = 0;
-        rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0xFF, 0x00);
+        if (chg_ind == 1){rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0xFF, 0x00);}
+    //    rgb_matrix_set_color(HS_MATRIX_BLINK_INDEX_BAT, 0x00, 0xFF, 0x00);
     } else if (*md_getp_bat() <= BATTERY_CAPACITY_LOW) {
-
-        rgb_matrix_hs_bat_set(HS_MATRIX_BLINK_INDEX_BAT, (RGB){0xFF, 0x00, 0x00}, 250, 1);
+        if (chg_ind == 1){rgb_matrix_hs_bat_set(HS_MATRIX_BLINK_INDEX_BAT, (RGB){0xFF, 0x00, 0x00}, 250, 1);}
+    //    rgb_matrix_hs_bat_set(HS_MATRIX_BLINK_INDEX_BAT, (RGB){0xFF, 0x00, 0x00}, 250, 1);
 
         if (*md_getp_bat() <= BATTERY_CAPACITY_STOP) {
             if (!battery_process_time) {
