@@ -17,7 +17,8 @@ enum custom_keycodes {
     HS_DIR,                 //custom 65
     HS_SIRI,                //custom 66
     HS_CT_A,                //custom 67
-    BT_TEST                 //custom 68
+    BT_TEST,                //custom 68
+    AUTO_TOGGLE             //custom 69
 };
 
 #define ______ HS_BLACK
@@ -34,7 +35,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
         KC_LCTL,  KC_LCMD,  KC_LALT,                      KC_SPC,                                 KC_RALT,  MO(_FL),  KC_RCTL,  KC_LEFT,  KC_DOWN,  KC_RGHT),
 
     [_FL] = LAYOUT( /* Function Layer */
-        QK_BOOT,  KC_MYCM,  KC_MAIL,  KC_WSCH,  KC_WHOM,  KC_MSEL,  KC_MPLY,  KC_MPRV,  KC_MNXT,  _______,  _______,  _______,  _______,  RGB_MOD,  KC_MPLY,
+        _______,  AUTO_TOGGLE,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  RGB_MOD,  KC_MPLY,
         EE_CLR,   _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  _______,  RGB_SPD,  RGB_SPI,  _______,  _______,
         _______,  _______,  HS_DIR,   KC_BT1,   KC_BT2,   KC_BT3,   KC_2G4,   KC_USB,   KC_INS,   _______,  KC_PSCR,  _______,  _______,  _______,  _______,
         _______,  _______, _______,  _______,  _______,   _______,  _______,  _______,  _______,  RGB_TOG,  _______,  _______,            _______,  _______,
@@ -132,7 +133,36 @@ bool led_update_user(led_t led_state) {
     return true;
 }
 
+char random_char(void) {
+    const char charset[] =
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "0123456789     "; // extra spaces for realism
+
+    return charset[rand() % (sizeof(charset) - 1)];
+}
+
+// ─────────────────────────────
+// State variables
+// ─────────────────────────────
+void last_matrix_activity_trigger(void);
+
+bool auto_typing = false;
+
+bool is_auto_typing_active(void) {
+    return auto_typing;
+}
+
+uint16_t typing_count = 0;
+bool is_deleting = false;
+bool is_idle = false;
+uint32_t idle_until = 0;
+
+uint32_t next_action_time = 0;
+uint16_t typing_interval = 100;
+
 uint32_t hs_ct_time;
+
 bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case BT_TEST: {
@@ -345,10 +375,34 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
             return false;
         } break;
 
-        case MO(_FL):  {
-            num_pad_lit = record->event.pressed;
+        // case MO(_FL):  {
+        //     num_pad_lit = record->event.pressed;
+        //     return true;
+        // } break;
+
+        case AUTO_TOGGLE: {
+            if (record->event.pressed){
+                auto_typing = !auto_typing;
+
+                if (auto_typing) {
+                    // reset state
+                    rgb_matrix_disable_noeeprom();
+                    typing_count = 0;
+                    is_deleting = false;
+                    next_action_time = timer_read(); 
+                } else {
+                    rgb_matrix_enable_noeeprom();
+                }
+            } return false;
+        }
+
+        case KC_ESC: {
+            if (auto_typing){
+                rgb_matrix_enable_noeeprom();
+                auto_typing = false;
+            }
             return true;
-        } break;
+        }
 
         // case KC_LCMD: {
         //     if (keymap_is_mac_system()) {
@@ -379,6 +433,74 @@ bool     process_record_user(uint16_t keycode, keyrecord_t *record) {
     }
 
     return true;
+}
+
+void matrix_scan_user(void) {
+    if (!auto_typing) return;
+
+    // ───── Handle idle state ─────
+    if (is_idle) {
+        if (timer_elapsed32(idle_until) < 0xFFFFFFFF) {
+            if (timer_read32() < idle_until) {
+                return; // still idling
+            }
+        }
+        is_idle = false; // idle finished
+    }
+
+    // ───── Randomly enter idle ─────
+    if (!is_idle && (rand() % 300 == 0)) {  
+        // ~1 in 300 chance each scan
+        uint16_t idle_time = 1000 + (rand() % 4000); // 1–5 sec
+        idle_until = timer_read32() + idle_time;
+        is_idle = true;
+        return;
+    }
+
+    if (timer_elapsed(next_action_time) < typing_interval) return;
+    next_action_time = timer_read();
+
+    // ───── Deleting mode ─────
+    if (is_deleting) {
+        typing_interval = 40 + (rand() % 120);
+        tap_code(KC_BSPC);
+        typing_count--;    
+        if (typing_count == 0) {
+            is_deleting = false;
+        }     
+        return;
+    }
+
+    // ───── Typing mode ─────
+    // char c = random_char();
+    // tap_code_delay(c, 5);
+
+    // ───── Typing ─────
+    typing_interval = 80 + (rand() % 200);
+
+    char c = random_char();
+
+    send_char(c);
+
+    // if (c >= 'a' && c <= 'z') {
+    //     tap_code(KC_A + (c - 'a'));
+    // } else if (c >= 'A' && c <= 'Z') {
+    //     register_code(KC_LSFT);
+    //     tap_code(KC_A + (c - 'A'));
+    //     unregister_code(KC_LSFT);
+    // } else if (c >= '0' && c <= '9') {
+    //     tap_code(KC_0 + (c - '0'));
+    // } else if (c == ' ') {
+    //     tap_code(KC_SPACE);
+    // }
+
+    typing_count++;
+
+    // trigger deletion phase
+    if (typing_count >= 20) {
+        is_deleting = true;
+        last_matrix_activity_trigger();
+    }
 }
 
 bool rgb_matrix_indicators_user() {
@@ -418,22 +540,26 @@ bool rgb_matrix_indicators_user() {
 
     if (host_keyboard_led_state().caps_lock) rgb_matrix_set_color_all(0x20, 0x20, 0x20);
 
-    if (num_pad_lit){
-        if (my_num_flag == 1){
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_1, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_2, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_3, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_4, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_5, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_6, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_7, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_8, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_9, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_0, 0x20, 0x20, 0xFF);
-            rgb_matrix_set_color(HS_RGB_INDEX_NUM_PRD, 0x20, 0x20, 0xFF);
-        }
-        return true;
-    }
+    // if (num_pad_lit){
+    //     if (my_num_flag == 1){
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_1, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_2, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_3, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_4, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_5, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_6, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_7, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_8, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_9, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_0, 0x20, 0x20, 0xFF);
+    //         rgb_matrix_set_color(HS_RGB_INDEX_NUM_PRD, 0x20, 0x20, 0xFF);
+    //     }
+    //     return true;
+    // }
 
     return true;
+}
+
+void keyboard_post_init_user(void) {
+    srand(timer_read32());
 }

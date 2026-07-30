@@ -30,6 +30,7 @@ enum layers {
 #define keymap_is_mac_system() ((get_highest_layer(default_layer_state) == _MBL) || (get_highest_layer(default_layer_state) == _MFL))
 #define keymap_is_base_layer() ((get_highest_layer(default_layer_state) == _BL) || (get_highest_layer(default_layer_state) == _FL))
 
+bool     is_auto_typing_active(void);
 bool     charging_state    = false;
 bool     battery_full_flag = false;
 HSV      start_hsv;
@@ -330,6 +331,35 @@ void housekeeping_task_kb(void) { // loop
     }
 
     housekeeping_task_user();
+
+    static bool backlight_off = false;                 // tracks backlight state
+    #define BACKLIGHT_TIMEOUT 20000                    // 20 seconds
+    #define BACKLIGHT_USBMODE 60000                    // 60 seconds
+
+    uint32_t idle = MIN(timer_elapsed32(kb_state.changed_at), last_matrix_activity_elapsed());
+    
+    if (is_auto_typing_active()) {
+        idle = 0;
+    }
+
+    if (wireless_get_current_devs() != DEVS_USB) {
+        if (!backlight_off && idle > BACKLIGHT_TIMEOUT) {
+            rgb_matrix_disable_noeeprom();                       // turn off backlight
+            backlight_off = true;
+        } else if (backlight_off && idle <= BACKLIGHT_TIMEOUT && !lower_sleep) {
+            rgb_matrix_enable_noeeprom();                        // restore backlight
+            backlight_off = false;
+        }
+    } else {
+    // USB mode: ensure RGB stays on
+        if (!backlight_off && idle > BACKLIGHT_USBMODE) {
+            rgb_matrix_disable_noeeprom();                       // turn off backlight
+            backlight_off = true;
+        } else if (backlight_off && idle <= BACKLIGHT_USBMODE && !lower_sleep) {
+            rgb_matrix_enable_noeeprom();                        // restore backlight
+            backlight_off = false;
+        }
+    }
 }
 
 bool rgb_matrix_indicators_kb() {
